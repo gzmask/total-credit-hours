@@ -10,5 +10,5 @@
                  ]
   :main total-credit-hours.core
   :aot :all
-  :uberjar-name "go.jar"
+  :uberjar-name "total.jar"
   )

@@ -1,15 +1,16 @@
 (ns total-credit-hours.core
-  (:require [clojure.java.jdbc :as j]
+  (:require [clojure.tools.cli :refer [parse-opts]]
+            [clojure.java.jdbc :as j]
             [clojure.java.jdbc.sql :as s])
   (:gen-class))
 
-
-(def SQLDB {:classname "sun.jdbc.odbc.JdbcOdbcDriver"
+(def SQLDB (atom
+            {:classname "sun.jdbc.odbc.JdbcOdbcDriver"
             :subprotocol "odbc"
             ;:subname "BANNER"
-            :subname "TEST"
-            :user "???"
-            :password "???????"})
+            ;:user "???"
+            ;:password "???????"
+             }))
 
 (def stvcoll-all {
   :JS "~Johnson-Shoyama Grad School"
@@ -69,8 +70,6 @@
   (let [total (reduce + s)]
     (into [((keyword h) stvcoll-all)] (conj (vec s) total))))
 
-;(into ["1"] [1 2 3])
-
 (defn column-total [s]
   {:pre [(seq? s)
          (vector? (first s))
@@ -82,13 +81,10 @@
 (defn get-table [term-code camp-code]
   (column-total (for [camp-coll ((keyword camp-code) stvcamp-coll)]
     (row-total camp-coll (for [student-coll stvcoll]
-      (let [count-val (val (first (first (j/query SQLDB [(str "select UOFREXEC.F_GET_TOTAL_CREDIT_HOURS_RL('" term-code "','" student-coll "','" camp-code "','" camp-coll "') from dual;")]))))]
+      (let [count-val (val (first (first (j/query @SQLDB [(str "select UOFREXEC.F_GET_TOTAL_CREDIT_HOURS_RL('" term-code "','" student-coll "','" camp-code "','" camp-coll "') from dual;")]))))]
         (if (nil? count-val)
           0
           count-val)))))))
-
-;(first (first (j/query SQLDB [(str "select UOFREXEC.F_GET_TOTAL_CREDIT_HOURS_RL('200930','AD','C','AR') from dual;")])))
-;(get-table "200930" "C")
 
 (defn get-csv-camp
   [camp-code camp-tb]
@@ -117,5 +113,45 @@
       (get-csv-camp :S s)
       (get-csv-camp :U u))))
 
-(defn -main []
-  (spit "result.csv" (report-csv "200930")))
+(def cli-options
+  [["-h" "--help"]
+   ["-t" "--termcode termcode" "total -t [term code such as 200930]."
+    :id :term
+    :validate [#(re-find #"\d{6}" %) "Must be a 9 digit number."]]
+   ["-u" "--username username" "total -u [username such as lll200]."
+    :id :username]
+   ["-p" "--password password" "total -p [password]."
+    :id :password]
+   ["-d" "--db dbname" "total -d [database name]."
+    :id :db
+    :default "TEST"]
+   ["-c" "--csv csv-file" "total -c [csv-filename]."
+    :id :csv
+    :default "result.csv"]
+   ])
+
+(def help-txt "to get the hours total, simply run: \"total -t [term code] -c [csv file] -d [dbname] -u [username] -p [password]\" ")
+
+(defn exit [status & msg]
+  (when msg (println msg))
+  (System/exit status))
+
+(defn -main [& args]
+  (let [{opts :options args :arguments summary :summary errs :errors}
+        (parse-opts args cli-options)]
+    (when (not (empty? errs))
+      (doseq [err errs]
+        (println err))
+      (exit 1))
+    (when (:help opts)
+      (println help-txt)
+      (exit 0 summary))
+    (when (and (:username opts)
+               (:password opts))
+      (swap! SQLDB #(assoc % :user (:username opts)
+                             :password (:password opts)
+                             :subname (:db opts))))
+    (when (and (:term opts)
+               (:csv opts)
+               (nil? (:help opts)))
+      (spit (:csv opts) (report-csv (:term opts))))))
