@@ -8,8 +8,8 @@
             :subprotocol "odbc"
             ;:subname "BANNER"
             :subname "TEST"
-            :user "xxx"
-            :password "xxx"})
+            :user "???"
+            :password "???????"})
 
 (def stvcoll-all {
   :JS "~Johnson-Shoyama Grad School"
@@ -52,20 +52,70 @@
   :F "FN Univ"})
 
 
-(def stvcoll ["AD" "AR" "ED" "EN" "EP" "EX" "FA" "GS" "KI" "NU" "SC" "SW" "SP" "YY"])
+(def stvcoll ["AD" "AR" "ED" "EN" "EP" "EX" "FA" "GS" "KI" "NU" "SC" "SW" "SP" "YY" "00"])
+(def stvcoll-names (map #((keyword %) stvcoll-all) stvcoll))
 
 (def stvcamp-coll
-  {:C ["AR" "EP" "FA" "NU" "SC" "YY"]
-   :L ["AR" "EP" "FA" "NU" "SC" "YY"]
-   :F ["AD" "AR" "ED" "EN" "EP" "EX" "FA" "GS" "KI" "NU" "SC" "SW" "SP" "YY"]
-   :U ["AD" "AR" "ED" "EN" "EP" "EX" "FA" "GS" "KI" "NU" "SC" "SW" "SP" "YY"]})
+  {:C ["AR" "EP" "FA" "NU" "SC" "YY" "00"]
+   :L ["AR" "EP" "FA" "NU" "SC" "YY" "00"]
+   :S ["AD" "AR" "ED" "EN" "EP" "EX" "FA" "GS" "KI" "NU" "SC" "SW" "SP" "YY" "00"]
+   :U ["AD" "AR" "ED" "EN" "EP" "EX" "FA" "GS" "KI" "NU" "SC" "SW" "SP" "YY" "00"]})
+
+
+(defn row-total [h s]
+  {:pre [(seq? s)
+         (> (count s) 0)]
+   :post [(= (count %) (+ 2 (count s)))]}
+  (let [total (reduce + s)]
+    (into [((keyword h) stvcoll-all)] (conj (vec s) total))))
+
+;(into ["1"] [1 2 3])
+
+(defn column-total [s]
+  {:pre [(seq? s)
+         (vector? (first s))
+         (string? (first (first s)))
+         (number? (second (first s)))]
+   :post [(= (count %) (+ 1 (count s)))]}
+  (conj (vec s) (into ["totals:"] (vec  (apply map + (map rest s))))))
 
 (defn get-table [term-code camp-code]
-  (for [camp-coll (:C stvcamp-coll)]
-    (for [student-coll stvcoll]
+  (column-total (for [camp-coll ((keyword camp-code) stvcamp-coll)]
+    (row-total camp-coll (for [student-coll stvcoll]
       (let [count-val (val (first (first (j/query SQLDB [(str "select UOFREXEC.F_GET_TOTAL_CREDIT_HOURS_RL('" term-code "','" student-coll "','" camp-code "','" camp-coll "') from dual;")]))))]
         (if (nil? count-val)
           0
-          count-val)))))
+          count-val)))))))
 
-(get-table "201430" "C")
+;(first (first (j/query SQLDB [(str "select UOFREXEC.F_GET_TOTAL_CREDIT_HOURS_RL('200930','AD','C','AR') from dual;")])))
+;(get-table "200930" "C")
+
+(defn get-csv-camp
+  [camp-code camp-tb]
+  (str
+     \newline
+     ;header
+     (str (camp-code stvcamp-all) ": " \newline)
+     ;students
+     (str ", " (apply str (interleave stvcoll-names (repeat ", "))) " total, " \newline)
+     ;numbers
+     (apply str (for [row (drop-last camp-tb)]
+                  (str (apply str (interleave row (repeat ", "))) \newline)))
+     ;totals
+     (str (apply str (interleave (last camp-tb) (repeat ", "))) \newline)
+))
+
+(defn report-csv
+  [term-code]
+  (let [c (get-table term-code "C")
+        l (get-table term-code "L")
+        s (get-table term-code "S")
+        u (get-table term-code "U")]
+    (str
+      (get-csv-camp :C c)
+      (get-csv-camp :L l)
+      (get-csv-camp :S s)
+      (get-csv-camp :U u))))
+
+(defn -main []
+  (spit "result.csv" (report-csv "200930")))
