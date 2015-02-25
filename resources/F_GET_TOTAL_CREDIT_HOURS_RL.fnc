@@ -1,5 +1,5 @@
 CREATE OR REPLACE FUNCTION F_GET_TOTAL_CREDIT_HOURS_RL
-(term_code_current IN varchar2,
+(term_code_current IN varchar3,
  student_coll_code IN char,
  course_camp_code IN char,
  course_coll_code IN char)

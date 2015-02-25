@@ -5,11 +5,11 @@
   (:gen-class))
 
 (def SQLDB (atom
-            {:classname "sun.jdbc.odbc.JdbcOdbcDriver"
-            :subprotocol "odbc"
-            ;:subname "BANNER"
-            ;:user "???"
-            ;:password "???????"
+            {:classname "oracle.jdbc.OracleDriver"
+             :subprotocol "oracle:oci"
+             ;:subname "@TEST"
+             ;:user "lei203"
+             ;:password "hatehatehatehatehate"
              }))
 
 (def stvcoll-all {
@@ -62,6 +62,57 @@
    :S ["AD" "AR" "ED" "EN" "EP" "EX" "FA" "GS" "KI" "NU" "SC" "SW" "SP" "YY" "00"]
    :U ["AD" "AR" "ED" "EN" "EP" "EX" "FA" "GS" "KI" "NU" "SC" "SW" "SP" "YY" "00"]})
 
+(defn get-total-credit-hours-rl
+  [term-code-current student-coll-code course-camp-code course-coll-code]
+  (str
+  "WITH  Q_cat_schd AS
+(SELECT
+   UOFREXEC.Y_CAT_SCHD.TERM_CODE,
+   UOFREXEC.Y_CAT_SCHD.CRN,
+   UOFREXEC.Y_CAT_SCHD.CREDIT_HRS,
+   UOFREXEC.Y_CAT_SCHD.CAMP_CODE,
+ DECODE(substr(Y_CAT_SCHD.SEQ_NUMB,0,1), 'L', 'L',
+                                         'S', 'S',
+                                         'C', 'C',
+                                         'F', 'F',
+                                         'U') AS CAMPUS,
+ DECODE(Y_CAT_SCHD.COLL_CODE, 'BU', 'AD',
+                              'CE', 'EX',
+                              'PA', 'KI',
+                              'ES', 'EN',
+                              Y_CAT_SCHD.COLL_CODE) AS COLL
+ FROM UOFREXEC.Y_CAT_SCHD),
+
+Course_Camp_Coll_T AS
+(SELECT Q_cat_schd.TERM_CODE,
+        Q_cat_schd.CRN,
+        Q_cat_schd.CREDIT_HRS,
+        CONCAT(Q_cat_schd.CAMPUS,
+               Q_cat_schd.COLL) AS Camp_and_Coll,
+        Q_cat_schd.CAMP_CODE
+ FROM Q_cat_schd
+ WHERE ((Q_cat_schd.TERM_CODE)='" term-code-current "') AND (Q_cat_schd.CAMP_CODE='1')),
+
+Student_Camp_Coll_T AS
+(SELECT UOFREXEC.Y_STUDENT_CAMP_COLL.TERM_CODE,
+        UOFREXEC.Y_STUDENT_CAMP_COLL.CRN,
+        UOFREXEC.Y_STUDENT_CAMP_COLL.CREDIT_HOURS,
+        UOFREXEC.Y_STUDENT_CAMP_COLL.CAMP_CODE,
+        DECODE(UOFREXEC.Y_STUDENT_CAMP_COLL.COLL_CODE,
+               'BU', 'AD',
+               'CE', 'EX',
+               'PA', 'KI',
+               'ES', 'EN',
+               UOFREXEC.Y_STUDENT_CAMP_COLL.COLL_CODE) AS COLL_CODE
+ FROM UOFREXEC.Y_STUDENT_CAMP_COLL
+ WHERE (UOFREXEC.Y_STUDENT_CAMP_COLL.TERM_CODE)='" term-code-current "')
+SELECT SUM(Student_Camp_Coll_T.CREDIT_HOURS)
+FROM Course_Camp_Coll_T, Student_Camp_Coll_T
+WHERE Course_Camp_Coll_T.TERM_CODE='" term-code-current "' AND Student_Camp_Coll_T.TERM_CODE='" term-code-current "'
+AND Course_Camp_Coll_T.CRN=Student_Camp_Coll_T.CRN
+-- Faculty of Bussiness Admin student who took Arts class in Campion
+AND Student_Camp_Coll_T.COLL_CODE='" student-coll-code "'
+AND Course_Camp_Coll_T.CAMP_AND_COLL=CONCAT('" course-camp-code "','" course-coll-code "')"))
 
 (defn row-total [h s]
   {:pre [(seq? s)
@@ -78,13 +129,18 @@
    :post [(= (count %) (+ 1 (count s)))]}
   (conj (vec s) (into ["totals:"] (vec  (apply map + (map rest s))))))
 
+;(str "select UOFREXEC.F_GET_TOTAL_CREDIT_HOURS_RL('" term-code "','" student-coll "','" camp-code "','" camp-coll "') from dual;")
+
 (defn get-table [term-code camp-code]
   (column-total (for [camp-coll ((keyword camp-code) stvcamp-coll)]
     (row-total camp-coll (for [student-coll stvcoll]
-      (let [count-val (val (first (first (j/query @SQLDB [(str "select UOFREXEC.F_GET_TOTAL_CREDIT_HOURS_RL('" term-code "','" student-coll "','" camp-code "','" camp-coll "') from dual;")]))))]
+      (let [count-val (val (first (first (j/query @SQLDB [(get-total-credit-hours-rl term-code student-coll camp-code camp-coll)]))))]
         (if (nil? count-val)
           0
           count-val)))))))
+
+;(get-table "201410" "C")
+;(get-total-credit-hours-rl "2001410" "AR" "AR" "C")
 
 (defn get-csv-camp
   [camp-code camp-tb]
@@ -122,7 +178,7 @@
     :id :username]
    ["-p" "--password password" "total -p [password]."
     :id :password]
-   ["-d" "--db dbname" "total -d [database name]."
+   ["-d" "--db dbname" "total -d [database name]. TEST, QPRD, DEVL etc."
     :id :db
     :default "TEST"]
    ["-c" "--csv csv-file" "total -c [csv-filename]."
@@ -150,7 +206,7 @@
                (:password opts))
       (swap! SQLDB #(assoc % :user (:username opts)
                              :password (:password opts)
-                             :subname (:db opts))))
+                             :subname (str "@" (:db opts)))))
     (when (and (:term opts)
                (:csv opts)
                (nil? (:help opts)))

@@ -8,6 +8,7 @@
                  [org.clojure/java.jdbc "0.3.0-alpha4"]
                  [org.clojure/tools.cli "0.3.1"]
                  ]
+  :resource-paths ["lib/ojdbc6.jar"]
   :main total-credit-hours.core
   :aot :all
   :uberjar-name "total.jar"
