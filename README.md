@@ -3,4 +3,4 @@
 
 ## Usage
 
-lein run
+lein run -- -h
